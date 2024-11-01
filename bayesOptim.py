@@ -1,110 +1,46 @@
-# from bayes_opt import BayesianOptimization
-# from sklearn.datasets import make_regression
-# from sklearn.model_selection import cross_val_score
-# from sklearn.linear_model import Ridge
-
-# # 定义目标函数
-# def ridge_objective(alpha, epsilon):
-#     X, y = make_regression(n_samples=100, n_features=10, noise=0.1)
-#     model = Ridge(alpha=alpha, fit_intercept=True)
-#     scores = cross_val_score(model, X, y, cv=5, scoring="neg_mean_squared_error")
-#     return scores.mean()
-
-# # 定义优化器
-# optimizer = BayesianOptimization(
-#     f=ridge_objective,
-#     pbounds={"alpha": (0.1, 10), "epsilon": (0.01, 1)},
-#     random_state=1,
-# )
-
-# # 进行优化
-# optimizer.maximize(init_points=2, n_iter=20)
-
-# # 获取最佳参数组合
-# best_params = optimizer.max['params']
-# print("Best parameters:", best_params)
-# print("-----------------------")
-# print(ridge_objective(0.1011, 0.0734))
-
-
-
-
-
 import numpy as np
 from skopt import gp_minimize
-from skopt.space import Real
-from skopt.plots import plot_convergence
-import matplotlib.pyplot as plt
 
-# 定义目标函数
-def objective(x):
-    x, y = x[0], x[1]
-    return (x - 5) ** 2 + (y - 5) ** 2
+np.random.seed(123)
 
-# 初始采样点
-initial_points = np.array([
-    [0, 0],
-    [1, 1],
-    [2, 2],
-    [3, 3],
-    [4, 4],
-    [6, 6],
-    [7, 7],
-    [8, 8],
-    [9, 9],
-    [10, 10]
-])
-initial_values = np.array([objective(x) for x in initial_points])
+# 使用黑盒函数。
+def f(x):
+    return (np.sin(5 * x[0]) * (1 - np.tanh(x[0] ** 2)) *
+            np.random.randn() * 0.1)
 
-# 定义搜索空间
-search_space = [Real(0, 10), Real(0, 10)]
+from skopt import Optimizer
+opt = Optimizer([(-2.0, 2.0)])
 
-# 初始化数据
-X = initial_points
-Y = initial_values
+for i in range(20):
+    suggested = opt.ask()
+    y = f(suggested)
+    res = opt.tell(suggested, y)
+print("x*=%.2f f(x*)=%.2f" % (res.x[0], res.fun))
+print(res.x_iters)
+print(res.func_vals)
 
-# 迭代次数
-n_iterations = 10
+# ask-tell 接口，告诉以往历史，获取推荐值。
+opt = Optimizer([(-2.0, 2.0)], base_estimator = "RF")
+x = [[0.8518212820929092], [0.8766012406190926], [-0.03552426626961047], [0.31877718809044087], [-1.4401969494784619], [-0.7033964264818355], [-1.0209628921843203], [0.527168070748202], [-0.23897128774369447], [-0.2885460366487216], [0.8674537062760881], [0.8136170500277524], [-1.9999879441715187], [1.1502538557586242], [-0.7489527857388156], [-0.6559726090374027], [-1.711998287744601], [1.6315941877440592], [0.8495387119676345], [-0.1824596817918942]]
+y = [-6.05458547e-02,  2.22664068e-02,  7.79974860e-03,  1.24846197e-01,
+ -4.14762245e-03, -2.59488268e-02,  1.62536846e-02,  5.82592922e-02,
+ -2.07300216e-02,  4.21389150e-02, -1.04845796e-02,  6.40925188e-03,
+ -3.34007696e-05,  6.40446963e-03,  1.51998060e-02,  1.24821476e-02,
+  1.89629203e-04, -5.19809170e-05, -2.63528963e-02, -5.98541784e-02]
+res = opt.tell(x, y)
+print("x*=%.2f f(x*)=%.2f" % (res.x[0], res.fun))
+print(res.func_vals)
 
-for i in range(n_iterations):
-    # 使用已有数据进行贝叶斯优化
-    res = gp_minimize(
-        func=objective,
-        dimensions=search_space,
-        n_calls=1,  # 每次只做一次迭代
-        n_random_starts=0,  # 不再进行随机采样
-        acq_func="EI",  # 采集函数类型
-        x0=X,  # 已有采样点
-        y0=Y,  # 已有目标函数值
-        random_state=1  # 随机种子
-    )
-    
-    # 更新数据集
-    new_x = res.x_iters[-1].reshape(1, -1)
-    new_y = objective(new_x)
-    
-    X = np.vstack([X, new_x])
-    Y = np.append(Y, new_y)
-    
-    # 打印当前迭代的信息
-    print(f"Iteration {i+1}: Next sample point: {new_x}, Objective value: {new_y}")
 
-# 输出最终结果
-best_index = np.argmin(Y)
-best_x = X[best_index]
-best_y = Y[best_index]
-print(f"Best point found: {best_x}, Best objective value: {best_y}")
+# ask-tell 接口，分步骤告知历史数据，分步骤获取推荐值。
+opt = Optimizer([(-2.0, 2.0)])
+x = [[0.85], [1.2]]
+y = [1.02, 0.34]
+# start tell then ask
+res = opt.tell(x, y)
+suggested_x = opt.ask()
+# next tell then ask
+res = opt.tell(suggested, f(suggested_x))
+suggested_x = opt.ask()
 
-# 可视化
-# 创建网格
-x = np.linspace(0, 10, 100)
-y = np.linspace(0, 10, 100)
-xx, yy = np.meshgrid(x, y)
-Z = objective(np.vstack((xx.ravel(), yy.ravel())).T).reshape(xx.shape)
 
-fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-surf = ax.plot_surface(xx, yy, Z, cmap='viridis', alpha=0.5)
-ax.scatter(X[:, 0], X[:, 1], Y, color='r', marker='x')
-ax.scatter(best_x[0], best_x[1], best_y, color='g', marker='o')
-
-plt.show()
